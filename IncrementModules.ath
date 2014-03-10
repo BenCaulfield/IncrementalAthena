@@ -1,0 +1,102 @@
+#Incremental and Decremental Computation
+#Ben Caulfield
+#October 2013
+(load-file "list-of.ath")
+
+declare Pos: (T) [(List T) N] -> T #gives value at position n in list
+define pos-zero := (forall ?t ?s . (Pos ?t::?s zero) = ?t)
+define pos-nonzero := (forall ?n ?t ?s . (Pos ?t::?s (S ?n)) =  (Pos ?s ?n)) #assumes n <= (length s)
+
+declare Pref: (T) [(List T) N] -> (List T) #returns first n values in given list
+define pref-zero := (forall ?s . (Pref ?s zero) = nil)
+define pref-empty := (forall ?n . (Pref nil ?n) = nil)
+define pref-nonzero := (forall ?n ?t ?s . (Pref ?t::?s (S ?n)) = ?t::(Pref ?s ?n))
+
+declare Suff: (T) [(List T) N] -> (List T) #returns all elements after nth position in given list
+define suff-zero := (forall ?s . (Suff ?s zero) = ?s)
+define suff-empty := (forall ?n . (Suff nil ?n) = nil)
+define suff-nonzero := (forall ?n ?s ?t . (Suff ?t::?s (S ?n)) = (Suff ?s ?n))
+
+define pref-suff-prop:= (forall ?s ?n . (Join (Pref ?s ?n) (Suff ?s ?n)) = ?s)
+
+#define pref-suff-proof :=
+#	by-induction pref-suff-prop
+#	zero => (!chain [(Join (Pref ?s zero) (Suff ?s zero)) = (Join nil (Suff ?s zero)) [pref-zero]
+#						= (Join nil ?s) [suff-zero]
+#						= ?s [left-empty]
+#			])
+#	(S n) => 
+module IncDomain{
+
+	domains I,D #may not be right
+
+	declare DId : D #domain identity
+	
+	declare Oper: [I D] -> D [*] #sometimes denoted *_j 
+	
+	declare Comp:  [(List I)] -> D #computes D value based on input stream
+	define comp-empty := (Comp nil) = DId
+	define comp-nonempty := (forall ?i ?s . (Comp ?i::?s) = ?i * (Comp ?s))
+
+	declare IncList: [D (List I)] -> D #Runs Oper on all values in given list
+	define inclist-empty := (forall ?d . (IncList ?d nil) = ?d)
+	define inclist-nonempty := (forall ?i ?s ?d . (IncList ?d ?i::?s) = (IncList (?i * ?d) ?s))  
+	
+	define Theory := (theory [] [comp-empty comp-nonempty inclist-empty inclist-nonempty] 'IncDomain)
+}
+
+#extend-module IncDomain {
+#	
+#	define inclist-id := (forall ?s . (IncList DId ?s) = (Comp (Reverse ?s)))
+#	
+#	define inclist-id-proof := 
+#		method (theorem adapty)
+#			by-induction inclist-id {
+#				nil => (!chain [(IncList DId nil) = DId [inclist-empty]
+#									= (Comp nil) [comp-empty]
+#									= (Comp (Reverse nil)) [Reverse.empty]
+#								]
+#						)
+#				(i::s) => 
+#					let {ih := (forall ?s1 . (IncList DId ?s1) = (Comp ?s1))} 
+#				(!chain [(IncList DId i::s) = (
+#}
+
+module DecDomain {
+	open IncDomain
+
+	declare InvOper: [D I] -> D [\] #inverse operator
+
+	define inv-def := (forall ?i ?d . ((?i * ?d) \ ?i) = ?d)
+	
+	#Possibly prove comp(pop(d::i)) = comp(d), here
+
+	define Theory := (theory [IncDomain.Theory] [inv-def] 'DecDomain) 
+} 
+
+extend-module DecDomain {
+
+	define dec-property := (forall ?i ?s . ((Comp ?i::?s) \ ?i) = (Comp ?s))
+	
+	define dec-property-proof :=
+		method (theorem adapt)
+			conclude dec-property
+				pick-any i s
+					(!chain [(Comp s) = ((i * (Comp s)) \ i) [inv-def]
+								= ((Comp i::s) \ i) [comp-nonempty]
+							]
+					)
+					
+
+	(evolve Theory [[dec-property] dec-property-proof])
+}
+
+
+module FullDecDomain{
+	open DecDomain
+
+	#states that the order inputs are added does not matter (similar to commutative property)
+	define comm-prop := (forall ?i ?j ?d . ?j * (?i * ?d) = ?i * (?j * ?d))
+
+	
+}

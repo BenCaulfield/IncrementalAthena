@@ -1,0 +1,183 @@
+
+\documentclass[30pt]{article}
+\usepackage{amssymb}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsthm}
+\usepackage{enumitem}
+\usepackage{nameref}
+\usepackage{mathabx}
+\usepackage{listings}
+\usepackage[affil-it]{authblk}
+\setlength{\textheight}{9in} \setlength{\headheight}{.2in}
+\setlength{\headsep}{0in} \setlength{\topmargin}{0in}
+\mathchardef\hyph="2D
+
+\newtheorem{thm}{Theorem}[section]
+\newtheorem{lemma}[thm]{Lemma}
+
+\newtheorem{define}{Definition}[section]
+
+
+\let\olddefinition\define
+\renewcommand{\define}{\olddefinition\normalfont}
+
+%\let\olddefinition\thm
+%\renewcommand{\thm}{\olddefinition\normalfont}
+
+\begin{document}
+
+\title{Formal Verification of Incremental Computation in Athena}
+\author{
+ 	Benjamin Caulfield \qquad Carlos Varela \\
+	\and
+	David Musser \qquad Ian Dunn\\
+	\{caulfb2, dunni\}@rpi.edu\\
+	\{cvarela, musser\}@cs.rpi.edu\\
+	 Rensselaer Polytechnic Institute\\
+        	Computer Science Department\\
+        	Troy, NY 12180\\
+}
+
+\maketitle
+
+\abstract
+\large
+
+\indent This paper studies incremental (online) algorithms, which process inputs as they are fed to a program. We present a model to prove that a given incremental algorithm is equivalent to a base algorithm run on an entire set of inputs at once. The model can also be applied to decremental algorithms, which recompute values when inputs are removed from a stream. The model is implemented in Athena, a proof-system in which users can write both programs and machine-checkable proofs. To show the applicability of our model, we use Athena to prove the correctness of incremental and decremental algorithms for string concatination, averages, and the k-nearest neighbor algorithm.
+
+
+\section{Introduction}
+\large
+
+\indent This paper discusses a model for incremental and decremental computation which has been implemented in the Athena language.Athena is a proof system being developed by Konstantine Arkoudas and David Musser. Athena can be used both as a programming language and as a system for writing machine-checkable proofs. Programs in Athena are mostly functional and resemble Scheme and ML in both sytax and semantics. Athena's theorem proving capabilities are based on many-sorted first-order logic. The system is being developed so that proofs are easily readable, but still mathematically formal \cite{Musser12, Musser13}.
+
+\indent As a new system, there has been little research on the use of Athena in modeling computation. Currently, the only paper on this subject is \emph{Structured Reasoning About Actor Systems} \cite{Varela13}. The article presents a model for actor-based computation in Athena and provides definitions for common requirements of concurrent languages. This includes persistence of actors, guaranteed message delivery, and fairness. The paper then applies the model to well-known examples of actor programs, such as the ticker and clock example. 
+
+\indent The current paper will follow a similar structure. We will begin by presenting our model for incremental and decremental computation. Latter sections will demonstrate the model by applying it to show the correctness of actual incremental algorithms. The first of these examples is a simple algorithm for adding and removing symbols from the end of strings. We will then verify an algorithm for recalculating the average of a changing set of integers. The final section shows that the result of the k-Nearest Neighbor problem can be updated as the set of training examples is altered.
+
+\section{The Model}
+\large
+
+\noindent We will now present our model using mathematical notation. See \emph{Appendix I} for the Athena implementation of the model. Our intention is for Athena users to specify the following domains and functions as they apply to their incremental or decremental algorithm. Athena will then provide a machine-checked proof that the given algorithm is correct. \\
+
+\noindent  Let $I$ be the input domain, $O$ be the output domain, and $I\hyph stream$ be a stream of inputs. \\
+
+\noindent Define $F: I\hyph stream \rightarrow O$ as an algorithm over the input stream.\\
+
+\noindent Let $D = D_1 \times D_2 \times ... \times  D_n $ be a collection of domains, where each $D_j$ stores the output of a partial computation of $F$.\\
+
+\noindent For each $D_j$, there is a corresponding function $f_j : I\hyph stream \rightarrow D_j$, which finds the partial computation from an input stream.\\
+
+\noindent The function $f: I\hyph Stream \rightarrow D$  combines the partial computation functions so $f(s) = (f_1(s),...,f_n(s))$.\\
+
+\noindent There is also a reduction function $R: D_1 \times D_2 \times ... \times D_n \rightarrow O$ such that for any input stream $s$,  $R(f_1(s),f_2(s),...,f_n(s)) = F(s)$\\
+
+\begin{define}
+The domain $D_j \in D$ is \emph{incremental} if there is an incrementing operator $\bigast _j : D_j \times I \rightarrow D_j$ such that for any input $i$ and input stream $s$, then $f_j(i::s) = f_j(s) \bigast_j i$.\\
+\end{define}
+
+\indent The main idea here is that larger computations can be broken up into smaller subcomputations. By showing that each of these subcomputations is incremental, we can show that the larger computation is also incremental. This leads to the following theorem. \\
+
+\begin{thm}
+Let $F$ be a function with corresponding domains and reduction function, and assume every domain in $D$ is incremental. Define the function $Inc: D \times I \rightarrow O$ such that $Inc(d, i) = R(d_1 \bigast_1 i, ..., d_n \bigast_n i) $, for $d \in D$ and $i \in I$. Let $d'$ be the saved set of partial computations for an input stream $s$, so $d' = f(s)$. Then $F(i::s) = Inc(d', i)$ for any input $i$, and $F$ is considered \emph{incremental}.
+\end{thm}
+\begin{proof}
+\begin{eqnarray*}
+F(i::s) & = & R(f_1(i::s), ..., f_n(i::s))\\
+& = & R(f_1(s) \mbox{ $\bigast_1$ }  i, ..., f_n(s) \mbox{ $\bigast_n$ } i) \\
+& = & Inc(f(s), i)\\
+& = & Inc(d', i)
+\end{eqnarray*}
+\end{proof}
+
+
+\begin{define}
+ The domain $D_j$ is \emph{decremental} if there is a decrementing operator $/_j : D_j \times I \rightarrow D_j $ such that for any $i \in I$ and $d \in D_j$, $(d_j \bigast_j i) /_j i = d_j$. Note that this definition depends on the incrementing operator, and so this paper assumes that any decremental algorithm is also incremental. \\
+\end{define}
+
+\begin{thm}
+Let $F$ be a function with corresponding domains and reduction function, and assume every domain in $D$ is decremental. Define the function $Dec: D \times I \rightarrow O$ such that $Dec(d, i) = R(d_1 \_1 i, ..., d_n \_n i)$. Let $d'$ be a saved partial computation on the stream $i::s$, so $d' = f(i::s)$. Then $F(s) = Dec(d', i)$. 
+\end{thm}
+\begin{proof}
+\begin{eqnarray*}
+F(s) & = & R(f_1(s), ..., f_n(s))\\
+& = & R(f_1(i::s) /_1  i, ..., f_n(i::s) /_n i) \\
+& = & Dec(f(i::s), i)\\
+& = & Dec(d', i)
+\end{eqnarray*}
+\end{proof}
+
+% input stream $s$, we know that $f_j(Remove(s, i)) = f_j(s)$  $/_j$  $ i$. 
+
+
+
+\section{String Concatenation}
+
+\indent This example deals with a simple case in which a series of symbols are part of an input stream and concatenated onto a string. The model is applied to show that symbols can be added and removed from the end of a given string. 
+
+\begin{itemize}
+\item $I = \Sigma = \{a, b, c \}$
+\item $O = \Sigma^*$, $O$ is the set of strings over $\Sigma$
+\item $F(s)$ returns a string containing all symbols in the order they were added.
+\item $D_1 = \Sigma^*$ and $f_1(s) = F(s)$.
+\item $d_1 \bigast_1 i = d_1 \cdot i$, where $d_1 \in D_1$, $i \in I$, and $\cdot$ is the concatenation operator.
+\item $d_1 /_1 i = x$ if $x \cdot i  = d_1$, where $d_1, x \in D_1$ and $i \in I$. 
+\item $R(d_1) = d_1$  
+\end{itemize}
+
+
+\section{Calculating Averages}
+
+\indent To illiustrate how this model can be used, consider the problem of finding the average of a set of natural numbers. After finding the average of a given set, we would like to add or remove numbers from that set without recomputing the entire average. To do this, we substitute domains and functions for those in the above model:
+
+\begin{itemize}
+\item $I = \mathbb{N}$,  $O = \mathbb{Q}$
+\item $F(s) = Average(s)$, where $s$ is a stream of inputs
+\item $D_1 = \mathbb{N}$ and $f_1(s) = Sum(s)$, where s is a stream of inputs
+\item $d_1 \bigast_1 i = d_1 + i$ and $d_1$ $/_1$ $ i = d_1 - i$, where $d_1 \in D_1$ and $i \in I$  
+\item $D_2 = \mathbb{N}$ and $f_2(s) = Length(s)$, where s is a stream of inputs
+\item $d_2 \bigast_2 i = d_2 + 1$ and $d_2$ $/_2$ $i = d_2 - 1$, where $d_2 \in D_2$ and $i \in I$ 
+\item $R(d_1, d_2)=d_1 / d_2$, for $d_1 \in D_1$ and $d_2 \in D_2$ 
+
+\end{itemize}	
+
+\noindent To illustrate the process of incrementing and decrementing a list of numbers, consider the input stream $s = [1, 2, 3, 4]$. We compute the sum $d_1 = Sum(s) = 10$ and the number of inputs $d_2 = Length(s) = 4$. These partial computations are stored, and we calculate the output $F(s) = R(d_1, d_2) = 10 / 4 = 2.5$. 
+
+\indent In order to add a new input 5 to $s$, we apply the $\bigast$ operators to get $f_1(5::s) = f_1(s) \bigast_1 5 = d_1 + 5 = 15$ and $f_2(s) \bigast_2 5 = d_2 +1 = 5$. We calculate the new average as $F(5::s) = R(15, 5) = 15 / 5 = 3$.
+
+\indent To remove the input 4 from the stream, we apply the $/$ operators to get $f_1(Remove(s, 4)) = f_1(s) /_1 4 = d_1 - 4 = 6$ and $f_2(Remove(s, 4)) = f_2(s) /_2 4 = d_2 - 1 = 3.$ We can now calculate the new average as $F(Remove(s, 4)) = R(6, 3) = 2$ 
+
+
+\section {Nearest Neighbor Example}
+
+
+
+
+
+
+\begin{thebibliography}{19}
+
+
+\bibitem{Varela13}  Musser, D., Varela, C. (2013). Structured reasoning about actor systems. Agere Workshop at ACM SPLASH 2013,
+
+\bibitem{Musser12} Arkoudas, K.,  Musser, D. (2012). Proof central. Retrieved from http://www.proofcentral.org/athena/
+
+\bibitem{Musser13} Musser, D. R. (2013). Understanding athena proofs. Informally published manuscript, Department of Computer Science, Rensselaer Polytechnic Institute , Troy, NY,  Retrieved from http://proofcentral.org/athena/resources/understanding-athena-proofs.pdf
+
+\end{thebibliography}
+
+\small
+\newgeometry{margin=0.5in}
+\section*{Appendix I: Athena Incremental Model}
+\noindent This appendix will be added once the code has been completed.
+\section*{Appendix II: Athena Proof of String Concatenation Example}
+\noindent This appendix will be added once the code has been completed.
+\section*{Appendix III: Athena Proof of Averages Example}
+\noindent This appendix will be added once the code has been completed.
+\section*{Appendix IV: Athena Proof of k-Nearest Neighbor Example}
+\noindent This appendix will be added once the code has been completed.
+
+%\include{Appendix.tex}
+
+\end{document}

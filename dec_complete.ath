@@ -1,0 +1,191 @@
+# Author: C. Varela
+# June 2013.
+
+#Updated By: Ben Caulfield
+# September 2013
+
+(load-file "nat-minus.ath")
+(load-file "inc.ath")
+
+# Predecessor for naturals
+declare Pred: [N] -> N
+# and semantics
+assert Pred-def := (forall ?n . (Pred (S ?n)) = ?n)
+
+# Input Type Minus Operator
+declare IMinus: [I I] -> I [-]
+# and semantics
+assert minus-def := (forall ?i ?j . (?i + ?j) - ?j = ?i)
+
+#Additional IPlus Axioms
+assert IPlus-comm := (forall ?i ?j . ?i + ?j = ?j + ?i)
+assert IPlus-assoc := (forall ?i ?j ?k . ?i + (?j + ?k) = (?i + ?j) + ?k)
+
+#append operation
+declare append: [I-Stream I-Stream] -> I-Stream
+#and semantics
+assert append-nonempty := (forall ?i ?s1 ?s2 . (= (append ?i::?s1 ?s2) ?i::(append ?s1 ?s2)))
+assert append-empty := (forall ?s . (= (append nil ?s) ?s))
+
+
+#Append size lemma and proof
+(define append-size-lemma (forall ?s1 ?s2 . (= (size (append ?s1 ?s2)) (+ (size ?s1) (size ?s2)))))
+
+open N.Plus
+(define (append-size-base)
+	conclude (forall ?s . (= (size (append nil ?s)) (+ (size nil) (size ?s))))
+		pick-any s
+			(!chain [(size (append nil s)) = (size s) [append-empty]
+					 = (+ zero (size s)) [left-zero]#plus => left-zero
+					 = (+ (size nil) (size s)) [size-empty]
+					]
+			)
+)
+			
+(define (append-size-step IH i s) 
+	conclude (forall ?s2 . (= (size (append (i::s) ?s2)) (+ (size (i::s)) (size ?s2))))
+		pick-any s2
+			(!chain [(size (append (i::s) s2)) = (size i::(append s s2)) [append-nonempty]
+						= (S (size (append s s2))) [size-nonempty]
+						= (S (+ (size s) (size s2))) [IH]
+						= (+ (S (size s)) (size s2)) [left-nonzero]
+						= (+ (size (i::s)) (size s2)) [size-nonempty]
+					]
+			)
+)
+
+by-induction append-size-lemma {
+	nil => (!append-size-base)
+	| (i::s) =>
+		let {induction-hypothesis := (forall ?s2 . (= (size (append s ?s2)) (+ (size s) (size ?s2))))}
+		(!append-size-step induction-hypothesis i s)
+}
+						
+#Append sum lemma & proof
+define append-sum-lemma := (forall ?s1 ?s2 . (= (sum (append ?s1 ?s2)) (IPlus (sum ?s1) (sum ?s2))))
+
+(define (append-sum-base)
+	conclude (forall ?s . (= (sum (append nil ?s)) (IPlus (sum nil) (sum ?s))))
+		pick-any s
+			(!chain [(sum (append nil s)) = (sum s) [append-empty]
+						= (IPlus (sum s) IId) [IId-identity]
+						= (IPlus IId (sum s)) [IPlus-comm]
+						= (IPlus (sum nil) (sum s)) [sum-empty]
+					]
+			)
+)
+
+(define (append-sum-step IH i s)
+	conclude (forall ?s2 . (= (sum (append (i::s) ?s2)) ((sum (i::s)) + (sum ?s2))))
+		pick-any s2
+			(!chain [(sum (append (i::s) s2)) = (sum (i::(append s s2))) [append-nonempty]
+						= (+ (sum (append s s2)) i) [sum-nonempty]
+						= (+ (IPlus (sum s) (sum s2)) i) [IH]
+						= (+ (sum s) (IPlus (sum s2) i)) [IPlus-assoc]
+						= (+ (sum s) (IPlus i (sum s2))) [IPlus-comm]
+						= (+ (IPlus (sum s) i) (sum s2)) [IPlus-assoc]
+						= (+ (sum (i::s)) (sum s2)) [sum-nonempty]
+					]
+			)
+)
+
+by-induction append-sum-lemma{
+	nil => (!append-sum-base)
+	| (i::s) =>
+		let {induction-hypothesis := (forall ?s2 . (= (sum (append s ?s2)) (IPlus (sum s) (sum ?s2))))}
+			(!append-sum-step induction-hypothesis i s)
+}
+
+						
+#Contains operation
+declare contains: [I-Stream I] -> Boolean
+#and semantics
+assert contains-def := (forall ?s ?i . (iff (contains ?s ?i) (exists ?s1 ?s2 . (= ?s (append ?s1 ?i::?s2)))))
+
+# Remove data operation
+declare remove: [I-Stream I] -> I-Stream
+# and semantics
+assert remove-def := (forall ?s ?i ?s1 ?s2 . (if (= ?s (append ?s1 ?i::?s2)) (= (remove ?s ?i) (append ?s1 ?s2)))) #The seperate "forall"s may be unneccessary 
+
+
+#Size lemma & proof
+define size-lemma := (forall ?i ?s . (if (contains ?s ?i) (= (size (remove ?s ?i)) (Pred (size ?s)))))
+
+#proof of this lemma
+conclude size-lemma
+	pick-any i s
+	assume (contains s i)
+		let{bydir1 := (!uspec* contains-def [s i]);
+			impl1 := (!left-iff bydir1);#conclude (if (contains s i) (exists ?s1 ?s2 . (= ?s (append ?s1 ?i::?s2))));
+						
+			exists1 := conclude (exists ?s1 ?s2 . (= s (append ?s1 i::?s2)))
+						(!mp impl1 (contains s i))
+			}
+			pick-witnesses s1 s2 for exists1
+				let{appeq := (!claim (= s (append s1 i::s2))); 
+					remdef := (!uspec* remove-def [s i s1 s2]);
+					 eq1 := (!mp remdef (= s (append s1 i::s2))) #concludes (= (remove s i) (append s1 s2))
+				}
+				(!chain [(size (remove s i)) =  (size (append s1 s2)) [eq1]
+						 = (Pred (S(size (append s1 s2)))) [Pred-def]
+						 = (Pred (S (+ (size s1) (size s2)))) [append-size-lemma]
+						 = (Pred (+ (size s1) (S (size s2)))) [right-nonzero]
+						 = (Pred (+ (size s1) (size i::s2))) [size-nonempty]
+						 = (Pred (size (append s1 i::s2))) [append-size-lemma]
+						 = (Pred (size s)) [appeq]
+						]
+				)
+				
+				
+
+#Sum lemma & Proof
+define sum-lemma := (forall ?i ?s . (if (contains ?s ?i) (= (sum (remove ?s ?i)) (IMinus (sum ?s) ?i))))
+
+conclude sum-lemma
+	pick-any i s
+	assume (contains s i)
+		let{bydir1 := (!uspec* contains-def [s i]);
+			impl1 := (!left-iff bydir1);#conclude (if (contains s i) (exists ?s1 ?s2 . (= ?s (append ?s1 ?i::?s2))));
+						
+			exists1 := conclude (exists ?s1 ?s2 . (= s (append ?s1 i::?s2)))
+						(!mp impl1 (contains s i))
+			}
+			pick-witnesses s1 s2 for exists1
+				let{appeq := (!claim (= s (append s1 i::s2))); 
+					remdef := (!uspec* remove-def [s i s1 s2]);
+					 eq1 := (!mp remdef (= s (append s1 i::s2))) #concludes (= (remove s i) (append s1 s2))
+				}
+				(!chain [(sum (remove s i)) =  (sum (append s1 s2)) [eq1]
+						 = (+ (sum s1) (sum s2)) [append-sum-lemma]
+						 = (- (+ (+ (sum s1) (sum s2)) i) i) [minus-def]
+						 = (- (+ (sum s1) (+ (sum s2) i)) i) [IPlus-assoc]
+						 = (- (+ (sum s1) (sum i::s2)) i) [sum-nonempty]
+						 = (- (sum (append s1 i::s2)) i) [append-sum-lemma]
+						 = (- (sum s) i) [appeq]
+						]
+				)
+
+# Decrementality operator
+declare Decr: [O N I] -> O
+# and semantics
+assert decr-def := (forall ?o ?n ?d . (Decr ?o ?n ?d) = (Red ((RedInv ?o ?n) - ?d) (Pred ?n)))
+
+# Decrementality Property: Equivalence of original f computation on
+# d_0,...,d_(i-1),d_(i+1),...d_n data stream and decremental Decr
+# computation on full d_0,...,d_n data stream and removed d_i datum
+
+define decr-property := (forall ?i ?s . (if (contains ?s ?i) (f (remove ?s ?i)) = (Decr (f ?s) (size ?s) ?i)))
+
+# Proof of correctness of incremental computation
+conclude decr-property
+ pick-any i s
+	assume (contains s i)
+	  (!combine-equations
+	   (!chain
+		[(f (remove s i)) = (Red (sum (remove s i)) (size (remove s i)))      [f-def]
+						  = (Red (sum (remove s i)) (Pred (size s)))             [size-lemma] #this assumes that i will be in s
+						  = (Red ((sum s) - i) (Pred (size s)))            [sum-lemma]])
+	   (!chain
+		[(Decr (f s) (size s) i) = (Red ((RedInv (f s) (size s)) - i) (Pred (size s)))                    [decr-def]
+								 = (Red ((RedInv (Red (sum s) (size s)) (size s)) - i) (Pred (size s)))   [f-def]
+								 = (Red ((sum s) - i) (Pred (size s)))     [red-inverse]]))
